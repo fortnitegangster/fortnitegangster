@@ -1,0 +1,60 @@
+import requests
+from urllib.parse import urlparse
+
+def check_ssl(url):
+    """Проверяет, использует ли сайт HTTPS."""
+    parsed_url = urlparse(url)
+    if parsed_url.scheme != "https":
+        print("Сайт не использует HTTPS.")
+        return False
+    return True
+
+def analyze_site(url):
+    """Делает запрос к сайту и анализирует его поведение."""
+    try:
+        # Проверяем HTTPS
+        if not check_ssl(url):
+            print("Сайт может быть ненадежным.")
+            return False
+
+        # Делаем запрос к сайту
+        response = requests.get(url, timeout=10)
+
+        # Проверяем перенаправления
+        if len(response.history) > 2:
+            print("Сайт выполняет слишком много перенаправлений.")
+            return False
+
+        # Анализируем заголовки сервера
+        server_header = response.headers.get("Server", "").lower()
+        if server_header:
+            print(f"Сервер сайта: {server_header}")
+        else:
+            print("Сервер не предоставляет информации о себе.")
+
+        # Проверяем содержимое
+        html_content = response.text
+        if "<form" in html_content.lower() and "password" in html_content.lower():
+            print("На сайте обнаружена форма для ввода пароля.")
+            return False
+
+        print("Сайт выглядит безопасным.")
+        return True
+
+    except requests.exceptions.SSLError:
+        print("SSL-сертификат сайта недействителен.")
+        return False
+    except requests.exceptions.ConnectionError:
+        print("Невозможно подключиться к сайту.")
+        return False
+    except requests.exceptions.Timeout:
+        print("Превышено время ожидания.")
+        return False
+    except Exception as e:
+        print(f"️Произошла ошибка: {e}")
+        return False
+
+# Основной код
+if __name__ == "__main__":
+    user_url = input("Введите URL для анализа: ")
+    analyze_site(user_url)
