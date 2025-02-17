@@ -1,0 +1,185 @@
+import tkinter as tk
+from tkinter import ttk, scrolledtext
+import requests
+from urllib.parse import urlparse
+import threading
+from datetime import datetime
+import customtkinter as ctk
+
+
+class SecurityAnalyzerGUI:
+    def __init__(self):
+        self.window = ctk.CTk()
+        self.window.title("РђРЅР°Р»РёР·Р°С‚РѕСЂ Р‘РµР·РѕРїР°СЃРЅРѕСЃС‚Рё РЎР°Р№С‚РѕРІ")
+        self.window.geometry("800x600")
+
+        # РЈСЃС‚Р°РЅРѕРІРєР° С‚РµРјС‹
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
+
+        self.create_widgets()
+
+    def create_widgets(self):
+        # Р’РµСЂС…РЅСЏСЏ РїР°РЅРµР»СЊ
+        header_frame = ctk.CTkFrame(self.window)
+        header_frame.pack(fill="x", padx=20, pady=10)
+
+        title_label = ctk.CTkLabel(
+            header_frame,
+            text="РђРЅР°Р»РёР·Р°С‚РѕСЂ Р‘РµР·РѕРїР°СЃРЅРѕСЃС‚Рё РЎР°Р№С‚РѕРІ",
+            font=("Helvetica", 24)
+        )
+        title_label.pack(pady=10)
+
+        # РџР°РЅРµР»СЊ РІРІРѕРґР° URL
+        input_frame = ctk.CTkFrame(self.window)
+        input_frame.pack(fill="x", padx=20, pady=10)
+
+        url_label = ctk.CTkLabel(
+            input_frame,
+            text="URL СЃР°Р№С‚Р°:",
+            font=("Helvetica", 14)
+        )
+        url_label.pack(side="left", padx=5)
+
+        self.url_entry = ctk.CTkEntry(
+            input_frame,
+            width=400,
+            placeholder_text="Р’РІРµРґРёС‚Рµ URL РґР»СЏ Р°РЅР°Р»РёР·Р°..."
+        )
+        self.url_entry.pack(side="left", padx=5, fill="x", expand=True)
+
+        self.analyze_button = ctk.CTkButton(
+            input_frame,
+            text="РђРЅР°Р»РёР·РёСЂРѕРІР°С‚СЊ",
+            command=self.start_analysis
+        )
+        self.analyze_button.pack(side="left", padx=5)
+
+        # РџСЂРѕРіСЂРµСЃСЃ Р±Р°СЂ
+        self.progress_bar = ctk.CTkProgressBar(self.window)
+        self.progress_bar.pack(fill="x", padx=20, pady=10)
+        self.progress_bar.set(0)
+
+        # РћР±Р»Р°СЃС‚СЊ РІС‹РІРѕРґР° СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ
+        self.output_area = scrolledtext.ScrolledText(
+            self.window,
+            wrap=tk.WORD,
+            height=20,
+            font=("Consolas", 11)
+        )
+        self.output_area.pack(fill="both", expand=True, padx=20, pady=10)
+
+        # РЎС‚Р°С‚СѓСЃ Р±Р°СЂ
+        self.status_label = ctk.CTkLabel(
+            self.window,
+            text="Р“РѕС‚РѕРІ Рє Р°РЅР°Р»РёР·Сѓ",
+            font=("Helvetica", 12)
+        )
+        self.status_label.pack(pady=5)
+
+    def update_output(self, message, tag=None):
+        self.output_area.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')} - {message}\n")
+        if tag:
+            last_line_start = self.output_area.get("end-2c linestart", "end-1c")
+            self.output_area.tag_add(tag, f"end-{len(last_line_start)}c linestart", "end-1c")
+        self.output_area.see(tk.END)
+
+    def check_ssl(self, url):
+        parsed_url = urlparse(url)
+        if parsed_url.scheme != "https":
+            self.update_output("РЎР°Р№С‚ РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚ HTTPS", "warning")
+            return False
+        self.update_output("HTTPS РїСЂРѕРІРµСЂРєР° РїСЂРѕР№РґРµРЅР°", "success")
+        return True
+
+    def check_downloads(self, response):
+        content_disposition = response.headers.get('Content-Disposition', '').lower()
+        content_type = response.headers.get('Content-Type', '').lower()
+        suspicious_types = ['application/exe', 'application/x-msdownload', 'application/x-msdos-program']
+
+        if 'attachment' in content_disposition:
+            self.update_output("РџСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµ: РЎР°Р№С‚ РїС‹С‚Р°РµС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё СЃРєР°С‡Р°С‚СЊ С„Р°Р№Р»", "warning")
+            return False
+
+        if any(suspicious_type in content_type for suspicious_type in suspicious_types):
+            self.update_output("РџСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµ: РћР±РЅР°СЂСѓР¶РµРЅ РїРѕРґРѕР·СЂРёС‚РµР»СЊРЅС‹Р№ С‚РёРї РєРѕРЅС‚РµРЅС‚Р°", "warning")
+            return False
+
+        self.update_output("РџСЂРѕРІРµСЂРєР° Р·Р°РіСЂСѓР·РѕРє РїСЂРѕР№РґРµРЅР°", "success")
+        return True
+
+    def analyze_site(self):
+        url = self.url_entry.get()
+        security_issues = []
+        is_safe = True
+
+        try:
+            self.progress_bar.set(0.2)
+            if not self.check_ssl(url):
+                security_issues.append("РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚ HTTPS")
+                is_safe = False
+
+            self.progress_bar.set(0.4)
+            response = requests.get(url, timeout=10, allow_redirects=True)
+            self.update_output("РЎРѕРµРґРёРЅРµРЅРёРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅРѕ СѓСЃРїРµС€РЅРѕ", "success")
+
+            self.progress_bar.set(0.6)
+            if len(response.history) > 2:
+                security_issues.append("РњРЅРѕР¶РµСЃС‚РІРµРЅРЅС‹Рµ РїРµСЂРµРЅР°РїСЂР°РІР»РµРЅРёСЏ")
+                is_safe = False
+                self.update_output(f"РћР±РЅР°СЂСѓР¶РµРЅРѕ {len(response.history)} РїРµСЂРµРЅР°РїСЂР°РІР»РµРЅРёР№", "warning")
+
+            if not self.check_downloads(response):
+                security_issues.append("РџРѕРґРѕР·СЂРёС‚РµР»СЊРЅС‹Рµ РїРѕРїС‹С‚РєРё Р·Р°РіСЂСѓР·РєРё С„Р°Р№Р»РѕРІ")
+                is_safe = False
+
+            self.progress_bar.set(0.8)
+            headers = response.headers
+            if not headers.get('X-Frame-Options'):
+                security_issues.append("РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚ Р·Р°С‰РёС‚Р° РѕС‚ РєР»РёРєРґР¶РµРєРёРЅРіР°")
+                self.update_output("РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚ Р·Р°С‰РёС‚Р° РѕС‚ РєР»РёРєРґР¶РµРєРёРЅРіР°", "warning")
+            if not headers.get('X-Content-Type-Options'):
+                security_issues.append("РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚ Р·Р°С‰РёС‚Р° РѕС‚ MIME-СЃРїСѓС„РёРЅРіР°")
+                self.update_output("РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚ Р·Р°С‰РёС‚Р° РѕС‚ MIME-СЃРїСѓС„РёРЅРіР°", "warning")
+
+            html_content = response.text.lower()
+            if "<form" in html_content and "password" in html_content:
+                self.update_output("РќР° СЃР°Р№С‚Рµ РѕР±РЅР°СЂСѓР¶РµРЅР° С„РѕСЂРјР° РґР»СЏ РІРІРѕРґР° РїР°СЂРѕР»СЏ", "warning")
+                self.update_output("РЈР±РµРґРёС‚РµСЃСЊ, С‡С‚Рѕ РІС‹ РґРѕРІРµСЂСЏРµС‚Рµ СЌС‚РѕРјСѓ СЃР°Р№С‚Сѓ", "warning")
+
+            self.progress_bar.set(1.0)
+            self.update_output("\nРРўРћР“РћР’РћР• Р—РђРљР›Р®Р§Р•РќРР•:", "header")
+            if security_issues:
+                self.update_output("РћР±РЅР°СЂСѓР¶РµРЅРЅС‹Рµ РїСЂРѕР±Р»РµРјС‹:", "warning")
+                for issue in security_issues:
+                    self.update_output(f"- {issue}", "warning")
+
+            status = "Р±РµР·РѕРїР°СЃРµРЅ" if is_safe else "РјРѕР¶РµС‚ Р±С‹С‚СЊ РЅРµР±РµР·РѕРїР°СЃРµРЅ"
+            self.update_output(f"\nРЎР°Р№С‚ {status}", "success" if is_safe else "error")
+
+        except Exception as e:
+            self.update_output(f"РћС€РёР±РєР°: {str(e)}", "error")
+        finally:
+            self.analyze_button.configure(state="normal")
+            self.status_label.configure(text="РђРЅР°Р»РёР· Р·Р°РІРµСЂС€РµРЅ")
+
+    def start_analysis(self):
+        self.output_area.delete(1.0, tk.END)
+        self.analyze_button.configure(state="disabled")
+        self.status_label.configure(text="Р’С‹РїРѕР»РЅСЏРµС‚СЃСЏ Р°РЅР°Р»РёР·...")
+        threading.Thread(target=self.analyze_site, daemon=True).start()
+
+    def run(self):
+        # РќР°СЃС‚СЂРѕР№РєР° С‚РµРіРѕРІ РґР»СЏ С„РѕСЂРјР°С‚РёСЂРѕРІР°РЅРёСЏ С‚РµРєСЃС‚Р°
+        self.output_area.tag_configure("success", foreground="green")
+        self.output_area.tag_configure("warning", foreground="orange")
+        self.output_area.tag_configure("error", foreground="red")
+        self.output_area.tag_configure("header", foreground="blue", font=("Helvetica", 12, "bold"))
+
+        self.window.mainloop()
+
+
+if __name__ == "__main__":
+    app = SecurityAnalyzerGUI()
+    app.run()
